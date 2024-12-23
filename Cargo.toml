@@ -1,0 +1,9 @@
+[package]
+name = "text-editor"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ceferino Patino <c4patino@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+crossterm = "0.28.1"
