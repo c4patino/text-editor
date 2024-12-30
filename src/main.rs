@@ -1,4 +1,6 @@
-use std::io;
+mod rope;
+
+use std::{cmp, io};
 
 use crossterm::{
     cursor,
@@ -7,95 +9,156 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 
-struct Editor {}
+use clap::Parser;
 
-fn run<W>(w: &mut W) -> io::Result<()>
-where
-    W: io::Write,
-{
-    execute!(w, terminal::EnterAlternateScreen)?;
+enum Mode {
+    NORMAL,
+    INSERT,
+    VISUAL,
+}
 
-    terminal::enable_raw_mode()?;
+#[allow(dead_code)]
+struct Editor<W: io::Write> {
+    buffer: Vec<String>,
+    command: String,
+    out: W,
+    cursor: (u16, u16),
+    size: (u16, u16),
+    mode: Mode,
+}
 
-    let mut messages: Vec<String> = Vec::new();
-
-    loop {
-        queue!(
-            w,
-            style::ResetColor,
-            terminal::Clear(ClearType::All),
-            cursor::Hide,
-            cursor::MoveTo(0, 0)
-        )?;
-
-        for message in &messages {
-            queue!(w, style::Print(message), cursor::MoveToNextLine(1))?;
-        }
-
-        w.flush()?;
-
-        match read_key_event()? {
-            KeyEvent {
-                code: KeyCode::Char('q'),
-                modifiers: KeyModifiers::CONTROL,
-                ..
-            } => {
-                break;
-            }
-            KeyEvent {
-                code: KeyCode::Char(c),
-                modifiers: KeyModifiers::CONTROL,
-                ..
-            } if c.is_ascii_alphabetic() => {
-                let ctrl_code = (c.to_ascii_uppercase() as u8 - b'A' + 1) as u8;
-                messages.push(format!("Ctrl + {} -> {}", c, ctrl_code));
-            }
-            KeyEvent {
-                code: KeyCode::Char(c),
-                modifiers,
-                ..
-            } => {
-                messages.push(format!(
-                    "Key: '{}' (ASCII: {}) Modifiers: {:?}",
-                    c, c as u8, modifiers
-                ));
-            }
-            KeyEvent {
-                code, modifiers, ..
-            } => {
-                messages.push(format!("KeyCode: {:?} Modifiers: {:?}", code, modifiers));
-            }
-        }
-
-        if messages.len() > 10 {
-            messages.remove(0); // Remove the oldest message
+impl<W: io::Write> Editor<W> {
+    fn new(out: W) -> Self {
+        Self {
+            size: terminal::size().unwrap(),
+            buffer: Vec::new(),
+            command: String::new(),
+            out,
+            cursor: (0, 0),
+            mode: Mode::NORMAL,
         }
     }
 
-    // Reset terminal to normal mode
-    execute!(
-        w,
-        style::ResetColor,
-        cursor::Show,
-        terminal::LeaveAlternateScreen
-    )?;
+    fn setup(&mut self) -> io::Result<()> {
+        execute!(self.out, terminal::EnterAlternateScreen)?;
+        terminal::enable_raw_mode()?;
 
-    terminal::disable_raw_mode()
-}
+        self.buffer.push("".to_string());
 
-pub fn read_key_event() -> std::io::Result<KeyEvent> {
-    loop {
-        if let Ok(Event::Key(key_event)) = read() {
-            return Ok(key_event);
+        for _ in 1..self.size.0 {
+            self.buffer.push("~".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn teardown(&mut self) -> io::Result<()> {
+        execute!(self.out, style::ResetColor, terminal::LeaveAlternateScreen)?;
+        terminal::disable_raw_mode()
+    }
+
+    fn run(&mut self) -> io::Result<()> {
+        loop {
+            queue!(
+                self.out,
+                style::ResetColor,
+                terminal::Clear(ClearType::CurrentLine),
+                cursor::MoveTo(0, 0)
+            )?;
+
+            for message in &self.buffer {
+                queue!(self.out, style::Print(message), cursor::MoveToNextLine(1))?;
+            }
+
+            queue!(self.out, cursor::MoveTo(self.cursor.0, self.cursor.1))?;
+
+            self.out.flush()?;
+
+            match Self::read_key_event()? {
+                KeyEvent {
+                    code: KeyCode::Char('q'),
+                    modifiers: KeyModifiers::CONTROL,
+                    ..
+                } => {
+                    break;
+                }
+                KeyEvent {
+                    code: KeyCode::Char('j'),
+                    ..
+                } => {
+                    self.cursor = (self.cursor.0, cmp::min(self.cursor.1 + 1, self.size.1 - 1));
+                }
+                KeyEvent {
+                    code: KeyCode::Char('k'),
+                    ..
+                } => {
+                    self.cursor = (self.cursor.0, self.cursor.1.saturating_sub(1));
+                }
+
+                KeyEvent {
+                    code: KeyCode::Char('h'),
+                    ..
+                } => {
+                    self.cursor = (self.cursor.0.saturating_sub(1), self.cursor.1);
+                }
+                KeyEvent {
+                    code: KeyCode::Char('l'),
+                    ..
+                } => {
+                    self.cursor = (cmp::min(self.cursor.0 + 1, self.size.0 - 1), self.cursor.1);
+                }
+                KeyEvent {
+                    code: KeyCode::Char('d'),
+                    modifiers: KeyModifiers::CONTROL,
+                    ..
+                } => {
+                    self.cursor = (
+                        self.cursor.0,
+                        cmp::min(self.cursor.1 + self.size.1 / 2, self.size.1 - 1),
+                    );
+                }
+                KeyEvent {
+                    code: KeyCode::Char('u'),
+                    modifiers: KeyModifiers::CONTROL,
+                    ..
+                } => {
+                    self.cursor = (
+                        self.cursor.0,
+                        cmp::max(self.cursor.1.saturating_sub(self.size.1 / 2), 0),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn read_key_event() -> std::io::Result<KeyEvent> {
+        loop {
+            if let Ok(Event::Key(key_event)) = read() {
+                return Ok(key_event);
+            }
         }
     }
 }
 
-pub fn buffer_size() -> io::Result<(u16, u16)> {
-    terminal::size()
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    filename: Option<String>,
 }
 
 fn main() -> std::io::Result<()> {
-    let mut stdout = io::stdout();
-    run(&mut stdout)
+    let args = Args::parse();
+    println!("{:?}", args);
+
+    let mut editor = Editor::new(io::stdout());
+
+    //editor.setup()?;
+    //editor.run()?;
+    //editor.teardown()
+
+    Ok(())
 }
