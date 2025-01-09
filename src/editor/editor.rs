@@ -1,19 +1,19 @@
 use color_eyre::Report;
 use crossterm::{
     cursor,
-    event::{self, poll, read, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{poll, read, Event, KeyEvent},
     execute, queue, style,
     terminal::{self, ClearType},
 };
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Write},
-    sync::{atomic::AtomicBool, mpsc, Arc},
+    sync::mpsc,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, sync::oneshot};
+use tokio::runtime::Runtime;
 
-use super::Keymap;
+use super::{default_keybinds, Keymap};
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub enum Mode {
@@ -24,27 +24,21 @@ pub enum Mode {
 }
 
 #[derive(Debug)]
-pub enum ControlCode {
-    CONTINUE,
-    QUIT,
-}
-
-#[derive(Debug)]
 pub struct Editor {
-    buffer: Vec<String>,
-    dirty: bool,
-    stop: bool,
+    pub(crate) buffer: Vec<String>,
+    pub(crate) dirty: bool,
+    pub(crate) stop: bool,
 
-    mode: Mode,
+    pub(crate) mode: Mode,
 
-    size: (u16, u16),
-    cursor: (u16, u16),
-    offset: (u16, u16),
+    pub(crate) size: (u16, u16),
+    pub(crate) cursor: (u16, u16),
+    pub(crate) offset: (u16, u16),
 
-    keymap: Keymap,
-    last_key_time: Instant,
+    pub(crate) keymap: Keymap,
+    pub(crate) last_key_time: Instant,
 
-    out: io::Stdout,
+    pub(crate) out: io::Stdout,
 }
 
 impl Drop for Editor {
@@ -56,25 +50,7 @@ impl Drop for Editor {
 impl Editor {
     pub fn new() -> Self {
         let mut keymap = Keymap::new();
-
-        keymap.add_keybind(
-            vec![Mode::NORMAL],
-            vec![
-                KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
-                KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL),
-            ],
-            |editor| Ok(editor.stop = true),
-        );
-
-        keymap.add_keybind(
-            vec![Mode::NORMAL],
-            vec![
-                KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
-                KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL),
-                KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL),
-            ],
-            |editor| Ok(editor.buffer.push("Double QUIT".to_string())),
-        );
+        default_keybinds(&mut keymap);
 
         let mut editor = Self {
             buffer: vec![String::new()],

@@ -107,34 +107,3 @@ impl Keymap {
         self.current.is_none()
     }
 }
-
-//impl<W: io::Write> Keymap<W> {
-//    pub fn new() -> Self {
-//        Self {
-//            root: KeyNode::new(),
-//            command: Vec::new(),
-//        }
-//    }
-//
-//    pub fn add_keybind<F>(&mut self, modes: Vec<Mode>, sequence: Vec<KeyEvent>, action: F)
-//    where
-//        F: FnMut(&mut Editor<W>) -> io::Result<ControlCode> + 'static,
-//    {
-//        for mode in modes {
-//            self.root.insert(mode, sequence.clone(), action);
-//        }
-//    }
-//
-//    pub fn clear(&mut self) {
-//        self.command.clear();
-//    }
-//
-//    pub fn traverse(&mut self, mode: Mode, event: KeyEvent) -> Option<&mut KeyNode<W>> {
-//        let mut current_node = &mut self.root;
-//
-//        if let Some(next_node) = current_node.children.get_mut(&(mode, event)) {
-//            self.current_path.push((mode, event));
-//            self.current
-//        }
-//    }
-//}
