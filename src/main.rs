@@ -1,146 +1,35 @@
-mod rope;
+mod editor;
 
-use std::{cmp, io};
-
-use crossterm::{
-    cursor,
-    event::{read, Event, KeyCode, KeyEvent, KeyModifiers},
-    execute, queue, style,
-    terminal::{self, ClearType},
-};
+use std::time::Instant;
 
 use clap::Parser;
+use color_eyre::Report;
+use crossterm::terminal;
 
-enum Mode {
-    NORMAL,
-    INSERT,
-    VISUAL,
+use editor::Editor;
+use tracing_subscriber::EnvFilter;
+
+struct RawModeGuard;
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+    }
 }
 
-#[allow(dead_code)]
-struct Editor<W: io::Write> {
-    buffer: Vec<String>,
-    command: String,
-    out: W,
-    cursor: (u16, u16),
-    size: (u16, u16),
-    mode: Mode,
-}
-
-impl<W: io::Write> Editor<W> {
-    fn new(out: W) -> Self {
-        Self {
-            size: terminal::size().unwrap(),
-            buffer: Vec::new(),
-            command: String::new(),
-            out,
-            cursor: (0, 0),
-            mode: Mode::NORMAL,
-        }
+fn setup() -> Result<(), Report> {
+    if std::env::var("RUST_LIB_BACKTRACE").is_err() {
+        std::env::set_var("RUST_LIB_BACKTRACE", "1")
     }
+    color_eyre::install()?;
 
-    fn setup(&mut self) -> io::Result<()> {
-        execute!(self.out, terminal::EnterAlternateScreen)?;
-        terminal::enable_raw_mode()?;
-
-        self.buffer.push("".to_string());
-
-        for _ in 1..self.size.0 {
-            self.buffer.push("~".to_string());
-        }
-
-        Ok(())
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info")
     }
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
-    fn teardown(&mut self) -> io::Result<()> {
-        execute!(self.out, style::ResetColor, terminal::LeaveAlternateScreen)?;
-        terminal::disable_raw_mode()
-    }
-
-    fn run(&mut self) -> io::Result<()> {
-        loop {
-            queue!(
-                self.out,
-                style::ResetColor,
-                terminal::Clear(ClearType::CurrentLine),
-                cursor::MoveTo(0, 0)
-            )?;
-
-            for message in &self.buffer {
-                queue!(self.out, style::Print(message), cursor::MoveToNextLine(1))?;
-            }
-
-            queue!(self.out, cursor::MoveTo(self.cursor.0, self.cursor.1))?;
-
-            self.out.flush()?;
-
-            match Self::read_key_event()? {
-                KeyEvent {
-                    code: KeyCode::Char('q'),
-                    modifiers: KeyModifiers::CONTROL,
-                    ..
-                } => {
-                    break;
-                }
-                KeyEvent {
-                    code: KeyCode::Char('j'),
-                    ..
-                } => {
-                    self.cursor = (self.cursor.0, cmp::min(self.cursor.1 + 1, self.size.1 - 1));
-                }
-                KeyEvent {
-                    code: KeyCode::Char('k'),
-                    ..
-                } => {
-                    self.cursor = (self.cursor.0, self.cursor.1.saturating_sub(1));
-                }
-
-                KeyEvent {
-                    code: KeyCode::Char('h'),
-                    ..
-                } => {
-                    self.cursor = (self.cursor.0.saturating_sub(1), self.cursor.1);
-                }
-                KeyEvent {
-                    code: KeyCode::Char('l'),
-                    ..
-                } => {
-                    self.cursor = (cmp::min(self.cursor.0 + 1, self.size.0 - 1), self.cursor.1);
-                }
-                KeyEvent {
-                    code: KeyCode::Char('d'),
-                    modifiers: KeyModifiers::CONTROL,
-                    ..
-                } => {
-                    self.cursor = (
-                        self.cursor.0,
-                        cmp::min(self.cursor.1 + self.size.1 / 2, self.size.1 - 1),
-                    );
-                }
-                KeyEvent {
-                    code: KeyCode::Char('u'),
-                    modifiers: KeyModifiers::CONTROL,
-                    ..
-                } => {
-                    self.cursor = (
-                        self.cursor.0,
-                        cmp::max(self.cursor.1.saturating_sub(self.size.1 / 2), 0),
-                    );
-                }
-                _ => {}
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn read_key_event() -> std::io::Result<KeyEvent> {
-        loop {
-            if let Ok(Event::Key(key_event)) = read() {
-                return Ok(key_event);
-            }
-        }
-    }
+    Ok(())
 }
 
 #[derive(Parser, Debug)]
@@ -150,15 +39,22 @@ struct Args {
     filename: Option<String>,
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Report> {
+    setup()?;
+
     let args = Args::parse();
-    println!("{:?}", args);
 
-    let mut editor = Editor::new(io::stdout());
+    {
+        terminal::enable_raw_mode()?;
+        let _raw_mode_guard = RawModeGuard;
 
-    //editor.setup()?;
-    //editor.run()?;
-    //editor.teardown()
+        let mut editor = Editor::new();
+        if let Some(filename) = &args.filename {
+            editor.load_file(filename);
+        };
+
+        editor.run()?;
+    }
 
     Ok(())
 }
