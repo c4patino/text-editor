@@ -145,6 +145,13 @@ pub fn default_keybinds(editor: &mut Editor) {
         let command = take(&mut e.command);
         match command.split_whitespace().next() {
             Some("q") => e.stop = true,
+            Some("e") => {
+                if let Some(filename) = command.split_whitespace().nth(1) {
+                    e.load_file(filename)?;
+                } else {
+                    return Err(eyre!("No filename specified"));
+                }
+            }
             Some("w") => {
                 if let Some(filename) = command.split_whitespace().nth(1).or(e.filename.clone().as_deref()) {
                     e.save_file(filename)?;
