@@ -128,6 +128,11 @@ pub fn default_keybinds(editor: &mut Editor) {
         Ok(())
     });
 
+    add_keybind!(editor, "n", "<Enter>", |e| {
+        e.error.clear();
+        Ok(())
+    });
+
     add_keybind!(editor, "c", "<CR>", |e| {
         if e.command.is_empty() {
             e.mode = Mode::NORMAL;

@@ -93,12 +93,21 @@ impl Display {
         self.cursor.move_by(delta, buffer);
     }
 
-    pub fn render(&mut self, buffer: &Vec<String>, command: &String, mode: &Mode) -> Result<(), Report> {
+    pub fn render(
+        &mut self,
+        buffer: &Vec<String>,
+        error: &Vec<String>,
+        command: &String,
+        mode: &Mode,
+    ) -> Result<(), Report> {
         queue!(self.out, style::ResetColor, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
 
         let mut max_lines = self.size.1 as usize;
-        if !command.is_empty() {
+        if *mode == Mode::COMMAND {
             max_lines -= 1;
+        }
+        if !error.is_empty() {
+            max_lines -= error.len();
         }
 
         let max_columns = self.size.0 as usize;
@@ -127,6 +136,16 @@ impl Display {
             for _ in 0..empty_lines {
                 queue!(self.out, style::Print("~"), cursor::MoveToNextLine(1))?;
             }
+        }
+
+        for line in error {
+            queue!(
+                self.out,
+                style::SetAttribute(style::Attribute::Italic),
+                style::Print(line),
+                style::SetAttribute(style::Attribute::Reset),
+                cursor::MoveToNextLine(1)
+            )?;
         }
 
         match mode {
