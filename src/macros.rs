@@ -163,14 +163,16 @@ pub fn default_keybinds(editor: &mut Editor) {
     });
 
     add_keybind!(editor, "n", "o", |e| {
-        e.buffer.insert(e.display.cursor.position.1 as usize - 1, String::new());
+        e.buffer.insert(e.display.cursor.position.1 as usize + 1, String::new());
         e.display.cursor.move_by((0, 1), &e.buffer);
+        e.mode = Mode::INSERT;
         Ok(())
     });
 
     add_keybind!(editor, "n", "O", |e| {
         e.buffer.insert(e.display.cursor.position.1 as usize, String::new());
-        e.display.cursor.move_by((0, -1), &e.buffer);
+        e.display.cursor.move_by((0, 0), &e.buffer);
+        e.mode = Mode::INSERT;
         Ok(())
     });
 
