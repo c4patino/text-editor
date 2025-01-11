@@ -96,8 +96,8 @@ impl Display {
     pub fn render(
         &mut self,
         buffer: &Vec<String>,
-        error: &Vec<String>,
         command: &String,
+        error: &Option<String>,
         mode: &Mode,
     ) -> Result<(), Report> {
         queue!(self.out, style::ResetColor, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
@@ -106,8 +106,8 @@ impl Display {
         if *mode == Mode::COMMAND {
             max_lines -= 1;
         }
-        if !error.is_empty() {
-            max_lines -= error.len();
+        if let Some(error) = error {
+            max_lines -= error.matches('\n').count();
         }
 
         let max_columns = self.size.0 as usize;
@@ -138,14 +138,16 @@ impl Display {
             }
         }
 
-        for line in error {
-            queue!(
-                self.out,
-                style::SetAttribute(style::Attribute::Italic),
-                style::Print(line),
-                style::SetAttribute(style::Attribute::Reset),
-                cursor::MoveToNextLine(1)
-            )?;
+        if let Some(error) = error {
+            for line in error.split("\n") {
+                queue!(
+                    self.out,
+                    style::SetAttribute(style::Attribute::Italic),
+                    style::Print(line),
+                    style::SetAttribute(style::Attribute::Reset),
+                    cursor::MoveToNextLine(1)
+                )?;
+            }
         }
 
         match mode {
@@ -165,7 +167,7 @@ impl Display {
             _ => queue!(
                 self.out,
                 cursor::SetCursorStyle::DefaultUserShape,
-                cursor::MoveTo(self.cursor.position.0, self.cursor.position.1),
+                cursor::MoveTo(self.cursor.position.0, self.cursor.position.1)
             )?,
         }
 

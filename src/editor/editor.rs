@@ -21,7 +21,7 @@ pub enum Mode {
 
 pub struct Editor {
     pub(crate) buffer: Vec<String>,
-    pub(crate) error: Vec<String>,
+    pub(crate) error: Option<String>,
     pub(crate) command: String,
 
     pub(crate) filename: Option<String>,
@@ -41,7 +41,7 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             buffer: vec![String::new()],
-            error: vec![],
+            error: None,
             command: String::new(),
 
             filename: None,
@@ -90,10 +90,13 @@ impl Editor {
         });
 
         while !self.stop {
-            self.handle_key_event(&mut rx)?;
+            if let Err(err) = self.handle_key_event(&mut rx) {
+                self.error = Some(err.to_string());
+                self.dirty = true;
+            }
 
             if self.dirty {
-                self.display.render(&self.buffer, &self.error, &self.command, &self.mode)?;
+                self.display.render(&self.buffer, &self.command, &self.error, &self.mode)?;
                 self.dirty = false;
             }
         }

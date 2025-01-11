@@ -1,6 +1,6 @@
-use std::mem::take;
-
+use color_eyre::eyre::eyre;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use std::mem::take;
 
 use crate::editor::{Editor, Mode};
 
@@ -128,8 +128,11 @@ pub fn default_keybinds(editor: &mut Editor) {
         Ok(())
     });
 
-    add_keybind!(editor, "n", "<Enter>", |e| {
-        e.error.clear();
+    add_keybind!(editor, "n", "<CR>", |e| {
+        if e.error.is_some() {
+            e.error = None;
+        }
+
         Ok(())
     });
 
@@ -145,12 +148,16 @@ pub fn default_keybinds(editor: &mut Editor) {
             Some("w") => {
                 if let Some(filename) = command.split_whitespace().nth(1).or(e.filename.clone().as_deref()) {
                     e.save_file(filename)?;
+                } else {
+                    return Err(eyre!("No filename specified"));
                 }
             }
             Some("wq") => {
                 if let Some(filename) = command.split_whitespace().nth(1).or(e.filename.clone().as_deref()) {
                     e.save_file(filename)?;
                     e.stop = true;
+                } else {
+                    return Err(eyre!("No filename specified"));
                 }
             }
             _ => {}
