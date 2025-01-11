@@ -1,8 +1,9 @@
 use color_eyre::Report;
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::{
-    fs::File,
-    io::{BufRead, BufReader},
+    fs::{self, File},
+    io::{BufRead, BufReader, Write},
+    path::Path,
     sync::mpsc,
     time::{Duration, Instant},
 };
@@ -20,6 +21,8 @@ pub enum Mode {
 
 pub struct Editor {
     pub(crate) buffer: Vec<String>,
+    pub(crate) filename: Option<String>,
+
     pub(crate) command: String,
     pub(crate) dirty: bool,
     pub(crate) stop: bool,
@@ -36,6 +39,8 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             buffer: vec![String::new()],
+            filename: None,
+
             command: String::new(),
             dirty: true,
             stop: false,
@@ -49,23 +54,25 @@ impl Editor {
         }
     }
 
-    pub fn load_file(&mut self, filename: &str) {
-        let file = match File::open(filename) {
-            Ok(file) => file,
-            Err(e) => {
-                eprintln!("Error opening file '{}': {}", filename, e);
-                return;
-            }
-        };
+    pub fn load_file(&mut self, filename: &str) -> Result<(), Report> {
+        self.filename = Some(filename.to_string());
+        if !Path::new(filename).exists() {
+            return Ok(());
+        }
 
+        let file = File::open(filename)?;
         let reader = BufReader::new(file);
-        self.buffer = match reader.lines().collect::<Result<Vec<String>, _>>() {
-            Ok(lines) => lines,
-            Err(e) => {
-                eprintln!("Error reading lines from file '{}': {}", filename, e);
-                return;
-            }
-        };
+        self.buffer = reader.lines().collect::<Result<Vec<String>, _>>()?;
+
+        Ok(())
+    }
+
+    pub fn save_file(&mut self, filename: &str) -> Result<(), Report> {
+        let mut file = File::create(filename)?;
+        file.write_all(self.buffer.join("\n").as_bytes())?;
+
+        self.filename = Some(filename.to_string());
+        Ok(())
     }
 
     pub fn run(&mut self) -> Result<(), Report> {

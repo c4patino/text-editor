@@ -53,7 +53,7 @@ fn main() -> Result<(), Report> {
         default_keybinds(&mut editor);
 
         if let Some(filename) = &args.filename {
-            editor.load_file(filename);
+            editor.load_file(filename)?;
         };
 
         editor.run()?;
