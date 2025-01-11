@@ -15,6 +15,7 @@ struct KeyNode {
 pub struct Keymap {
     root: HashMap<Mode, Rc<RefCell<KeyNode>>>,
     current: Option<Rc<RefCell<KeyNode>>>,
+    numeric_prefix: Option<usize>,
 }
 
 impl KeyNode {
@@ -41,7 +42,7 @@ impl KeyNode {
 
 impl Keymap {
     pub fn new() -> Self {
-        Self { root: HashMap::new(), current: None }
+        Self { root: HashMap::new(), current: None, numeric_prefix: None }
     }
 
     pub fn add_keybind<F>(&mut self, modes: Vec<Mode>, sequence: Vec<KeyEvent>, action: F)
@@ -57,6 +58,11 @@ impl Keymap {
     }
 
     pub fn traverse(&mut self, mode: &Mode, event: KeyEvent) -> Result<Option<KeyEvent>, Report> {
+        if let Some(digit) = event_to_digit(&event) {
+            self.numeric_prefix = Some(self.numeric_prefix.unwrap_or(0) * 10 + digit);
+            return Ok(None);
+        }
+
         let current_node = match self.current {
             Some(ref node) => node.clone(),
             None => self.root.get(mode).unwrap().clone(),
@@ -92,5 +98,18 @@ impl Keymap {
 
     pub fn is_empty(&self) -> bool {
         self.current.is_none()
+    }
+
+    pub fn repeats(&mut self) -> usize {
+        self.numeric_prefix.take().unwrap_or(1)
+    }
+}
+
+fn event_to_digit(event: &KeyEvent) -> Option<usize> {
+    match event {
+        KeyEvent { code: crossterm::event::KeyCode::Char(c), .. } if c.is_ascii_digit() => {
+            c.to_digit(10).map(|d| d as usize)
+        }
+        _ => None,
     }
 }

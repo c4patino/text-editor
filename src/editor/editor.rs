@@ -186,7 +186,9 @@ impl Editor {
 
     fn execute_keymap_action(&mut self) -> Result<(), Report> {
         if let Some(action) = self.keymap.get_action() {
-            action.borrow_mut()(self)?;
+            for _ in 0..self.keymap.repeats() {
+                action.borrow_mut()(self)?;
+            }
         };
 
         self.keymap.clear();
