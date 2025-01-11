@@ -1,13 +1,16 @@
 mod editor;
+mod util;
 
-use std::time::Instant;
+#[macro_use]
+mod macros;
 
 use clap::Parser;
 use color_eyre::Report;
 use crossterm::terminal;
+use tracing_subscriber::EnvFilter;
 
 use editor::Editor;
-use tracing_subscriber::EnvFilter;
+use macros::default_keybinds;
 
 struct RawModeGuard;
 impl Drop for RawModeGuard {
@@ -25,9 +28,7 @@ fn setup() -> Result<(), Report> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info")
     }
-    tracing_subscriber::fmt::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     Ok(())
 }
@@ -49,6 +50,8 @@ fn main() -> Result<(), Report> {
         let _raw_mode_guard = RawModeGuard;
 
         let mut editor = Editor::new();
+        default_keybinds(&mut editor);
+
         if let Some(filename) = &args.filename {
             editor.load_file(filename);
         };

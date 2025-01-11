@@ -1,21 +1,16 @@
 use color_eyre::Report;
-use crossterm::{
-    cursor,
-    event::{poll, read, Event, KeyEvent},
-    execute, queue, style,
-    terminal::{self, ClearType},
-};
+use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     sync::mpsc,
     time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
 
-use super::{default_keybinds, Keymap};
+use crate::util::{Display, Keymap};
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash)]
 pub enum Mode {
     NORMAL,
     COMMAND,
@@ -23,54 +18,35 @@ pub enum Mode {
     VISUAL,
 }
 
-#[derive(Debug)]
 pub struct Editor {
     pub(crate) buffer: Vec<String>,
+    pub(crate) command: String,
     pub(crate) dirty: bool,
     pub(crate) stop: bool,
 
     pub(crate) mode: Mode,
 
-    pub(crate) size: (u16, u16),
-    pub(crate) cursor: (u16, u16),
-    pub(crate) offset: (u16, u16),
+    pub(crate) display: Display,
 
     pub(crate) keymap: Keymap,
     pub(crate) last_key_time: Instant,
-
-    pub(crate) out: io::Stdout,
-}
-
-impl Drop for Editor {
-    fn drop(&mut self) {
-        let _ = execute!(self.out, style::ResetColor, terminal::LeaveAlternateScreen);
-    }
 }
 
 impl Editor {
     pub fn new() -> Self {
-        let mut keymap = Keymap::new();
-        default_keybinds(&mut keymap);
-
-        let mut editor = Self {
+        Self {
             buffer: vec![String::new()],
+            command: String::new(),
             dirty: true,
             stop: false,
 
             mode: Mode::NORMAL,
 
-            size: terminal::size().unwrap(),
-            cursor: (0, 0),
-            offset: (0, 0),
+            display: Display::new(),
 
-            keymap,
+            keymap: Keymap::new(),
             last_key_time: Instant::now(),
-
-            out: io::stdout(),
-        };
-
-        let _ = execute!(editor.out, terminal::EnterAlternateScreen);
-        editor
+        }
     }
 
     pub fn load_file(&mut self, filename: &str) {
@@ -100,23 +76,22 @@ impl Editor {
             tokio::spawn(async move {
                 Editor::key_event_listener(tx).await;
             });
+        });
 
-            while !self.stop {
-                self.handle_key_event(&mut rx).await?;
-                self.render().await?;
+        while !self.stop {
+            self.handle_key_event(&mut rx)?;
+
+            if self.dirty {
+                self.display.render(&self.buffer, &self.command, &self.mode)?;
+                self.dirty = false;
             }
+        }
 
-            self.buffer.push("This is outside main loop".to_string());
-            self.dirty = true;
-            self.render().await?;
-
-            Ok(())
-        })
+        Ok(())
     }
 
-    async fn handle_key_event(&mut self, rx: &mut mpsc::Receiver<KeyEvent>) -> Result<(), Report> {
+    fn handle_key_event(&mut self, rx: &mut mpsc::Receiver<KeyEvent>) -> Result<(), Report> {
         if self.last_key_time.elapsed().as_millis() > 1000 && !self.keymap.is_empty() {
-            self.buffer.push("TIMEOUT".to_string());
             self.execute_keymap_action()?;
             self.dirty = true;
         }
@@ -132,20 +107,67 @@ impl Editor {
             unresolved = self.keymap.traverse(&self.mode, event)?;
         }
 
-        if let Some(unresolved) = unresolved {
-            self.buffer.push(format!(
-                "{} {:?} {:?}",
-                unresolved.code, unresolved.modifiers, self.last_key_time
-            ));
-        }
-
         if self.keymap.is_leaf() {
             self.execute_keymap_action()?;
+        }
+
+        if let Some(unresolved) = unresolved {
+            if !unresolved.modifiers.intersects(KeyModifiers::ALT | KeyModifiers::CONTROL) {
+                self.handle_unresolved_key_event(unresolved);
+            }
         }
 
         self.last_key_time = Instant::now();
         self.dirty = true;
         Ok(())
+    }
+
+    fn handle_unresolved_key_event(&mut self, unresolved: KeyEvent) {
+        match self.mode {
+            Mode::COMMAND => {
+                if let KeyCode::Char(c) = unresolved.code {
+                    self.command.push(c);
+                } else if unresolved.code == KeyCode::Backspace {
+                    self.command.pop();
+                }
+            }
+            Mode::INSERT => match unresolved.code {
+                KeyCode::Char(c) => {
+                    let (x, y) = self.display.cursor.position;
+                    self.buffer[y as usize].insert(x as usize, c);
+                    self.display.move_cursor((1, 0), &self.buffer);
+                }
+                KeyCode::Enter => {
+                    let (x, y) = self.display.cursor.position;
+                    let remaining = self.buffer[y as usize].split_off(x as usize);
+                    self.buffer.insert((y + 1) as usize, remaining);
+                    self.display.move_cursor((-(x as i16), 1), &self.buffer)
+                }
+                KeyCode::Delete => {
+                    let (x, y) = self.display.cursor.position;
+                    if x < self.buffer[y as usize].len() as u16 {
+                        self.buffer[y as usize].remove(x as usize);
+                    } else if y + 1 < self.buffer.len() as u16 {
+                        let next_line = self.buffer.remove((y + 1) as usize);
+                        self.buffer[y as usize].push_str(&next_line);
+                    }
+                }
+                KeyCode::Backspace => {
+                    let (x, y) = self.display.cursor.position;
+                    if x > 0 {
+                        self.buffer[y as usize].remove((x - 1) as usize);
+                        self.display.move_cursor((-1, 0), &self.buffer);
+                    } else if y > 0 {
+                        let prev_line_len = self.buffer[(y - 1) as usize].len() as u16;
+                        let current_line = self.buffer.remove(y as usize);
+                        self.buffer[(y - 1) as usize].push_str(&current_line);
+                        self.display.move_cursor((prev_line_len as i16, -1), &self.buffer);
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
     }
 
     fn execute_keymap_action(&mut self) -> Result<(), Report> {
@@ -154,44 +176,6 @@ impl Editor {
         };
 
         self.keymap.clear();
-        Ok(())
-    }
-
-    async fn render(&mut self) -> Result<(), Report> {
-        if !self.dirty {
-            return Ok(());
-        }
-
-        queue!(
-            self.out,
-            style::ResetColor,
-            terminal::Clear(ClearType::All),
-            cursor::MoveTo(0, 0)
-        )?;
-
-        let max_lines = self.size.1 as usize;
-
-        let render = &self.buffer[self.offset.1 as usize..]
-            .iter()
-            .take(max_lines)
-            .collect::<Vec<_>>();
-
-        for line in render {
-            queue!(self.out, style::Print(line), cursor::MoveToNextLine(1))?;
-        }
-
-        let rendered_lines = render.len();
-        if rendered_lines < max_lines {
-            let empty_lines = max_lines - rendered_lines;
-            for _ in 0..empty_lines {
-                queue!(self.out, style::Print("~"), cursor::MoveToNextLine(1))?;
-            }
-        }
-
-        queue!(self.out, cursor::MoveTo(self.cursor.0, self.cursor.1))?;
-        self.out.flush()?;
-
-        self.dirty = false;
         Ok(())
     }
 

@@ -1,8 +1,8 @@
 use color_eyre::Report;
 use crossterm::event::KeyEvent;
-use std::{cell::RefCell, collections::HashMap, fmt, io, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::editor::{ControlCode, Editor, Mode};
+use crate::editor::{Editor, Mode};
 
 type ActionFn = dyn FnMut(&mut Editor) -> Result<(), Report>;
 
@@ -12,18 +12,14 @@ struct KeyNode {
     action: Option<Rc<RefCell<ActionFn>>>,
 }
 
-impl fmt::Debug for KeyNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "KeyNode {{ children: {:?} }}", self.children)
-    }
+pub struct Keymap {
+    root: HashMap<Mode, Rc<RefCell<KeyNode>>>,
+    current: Option<Rc<RefCell<KeyNode>>>,
 }
 
 impl KeyNode {
     pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self {
-            children: HashMap::new(),
-            action: None,
-        }))
+        Rc::new(RefCell::new(Self { children: HashMap::new(), action: None }))
     }
 
     pub fn is_leaf(&self) -> bool {
@@ -43,18 +39,9 @@ impl KeyNode {
     }
 }
 
-#[derive(Debug)]
-pub struct Keymap {
-    root: HashMap<Mode, Rc<RefCell<KeyNode>>>,
-    current: Option<Rc<RefCell<KeyNode>>>,
-}
-
 impl Keymap {
     pub fn new() -> Self {
-        Self {
-            root: HashMap::new(),
-            current: None,
-        }
+        Self { root: HashMap::new(), current: None }
     }
 
     pub fn add_keybind<F>(&mut self, modes: Vec<Mode>, sequence: Vec<KeyEvent>, action: F)
