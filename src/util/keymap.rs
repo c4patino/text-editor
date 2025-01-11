@@ -67,7 +67,7 @@ impl Keymap {
             Some(node) => node.clone(),
             None => {
                 if let Some(digit) = event_to_digit(&event) {
-                    self.numeric_prefix = Some(digit);
+                    self.numeric_prefix = Some(self.numeric_prefix.unwrap_or(0) * 10 + digit);
                     return Ok(None);
                 }
 
