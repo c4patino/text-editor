@@ -129,22 +129,27 @@ impl Display {
             }
         }
 
-        if !command.is_empty() {
-            queue!(
+        match mode {
+            Mode::INSERT => queue!(
+                self.out,
+                cursor::SetCursorStyle::BlinkingBar,
+                cursor::MoveTo(self.cursor.position.0, self.cursor.position.1),
+            )?,
+            Mode::COMMAND => queue!(
                 self.out,
                 style::SetAttribute(style::Attribute::Bold),
-                style::Print(command),
+                style::Print(format!(":{}", command)),
                 style::SetAttribute(style::Attribute::Reset),
-                cursor::MoveToNextLine(1)
-            )?;
+                cursor::SetCursorStyle::BlinkingBar,
+                cursor::MoveTo(command.len() as u16 + 1, self.size.1)
+            )?,
+            _ => queue!(
+                self.out,
+                cursor::SetCursorStyle::DefaultUserShape,
+                cursor::MoveTo(self.cursor.position.0, self.cursor.position.1),
+            )?,
         }
 
-        match mode {
-            Mode::INSERT => queue!(self.out, cursor::SetCursorStyle::BlinkingBar)?,
-            _ => queue!(self.out, cursor::SetCursorStyle::DefaultUserShape)?,
-        }
-
-        queue!(self.out, cursor::MoveTo(self.cursor.position.0, self.cursor.position.1))?;
         self.out.flush()?;
         Ok(())
     }

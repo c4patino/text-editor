@@ -1,3 +1,5 @@
+use std::mem::take;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::{Editor, Mode};
@@ -90,8 +92,6 @@ macro_rules! add_keybind {
 }
 
 pub fn default_keybinds(editor: &mut Editor) {
-    add_keybind!(editor, "ni", "<C-w><C-q>", |e| Ok(e.stop = true));
-
     add_keybind!(editor, "n", "k", |e| {
         e.display.move_cursor((0, -1), &e.buffer);
         Ok(())
@@ -123,6 +123,34 @@ pub fn default_keybinds(editor: &mut Editor) {
     });
 
     add_keybind!(editor, "ic", "<Esc>", |e| {
+        e.mode = Mode::NORMAL;
+        e.command.clear();
+        Ok(())
+    });
+
+    add_keybind!(editor, "c", "<CR>", |e| {
+        if e.command.is_empty() {
+            e.mode = Mode::NORMAL;
+            return Ok(());
+        }
+
+        let command = take(&mut e.command);
+        match command.split_whitespace().next() {
+            Some("q") => e.stop = true,
+            Some("w") => {
+                if let Some(filename) = command.split_whitespace().nth(1).or(e.filename.clone().as_deref()) {
+                    e.save_file(filename)?;
+                }
+            }
+            Some("wq") => {
+                if let Some(filename) = command.split_whitespace().nth(1).or(e.filename.clone().as_deref()) {
+                    e.save_file(filename)?;
+                    e.stop = true;
+                }
+            }
+            _ => {}
+        }
+
         e.mode = Mode::NORMAL;
         e.command.clear();
         Ok(())
