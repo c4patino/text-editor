@@ -58,11 +58,6 @@ impl Keymap {
     }
 
     pub fn traverse(&mut self, mode: &Mode, event: KeyEvent) -> Result<Option<KeyEvent>, Report> {
-        if let Some(digit) = event_to_digit(&event) {
-            self.numeric_prefix = Some(self.numeric_prefix.unwrap_or(0) * 10 + digit);
-            return Ok(None);
-        }
-
         let current_node = match self.current {
             Some(ref node) => node.clone(),
             None => self.root.get(mode).unwrap().clone(),
@@ -70,7 +65,14 @@ impl Keymap {
 
         let next_node = match current_node.borrow().children.get(&event) {
             Some(node) => node.clone(),
-            None => return Ok(Some(event)),
+            None => {
+                if let Some(digit) = event_to_digit(&event) {
+                    self.numeric_prefix = Some(digit);
+                    return Ok(None);
+                }
+
+                return Ok(Some(event));
+            }
         };
 
         self.current = Some(next_node);

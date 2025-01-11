@@ -136,6 +136,28 @@ pub fn default_keybinds(editor: &mut Editor) {
         Ok(())
     });
 
+    add_keybind!(editor, "n", "$", |e| {
+        let (_x, y) = e.display.cursor.position;
+        let line_len = e.buffer[y as usize].len() as u16 - 1;
+        e.display.cursor.move_x(line_len, &e.buffer);
+        Ok(())
+    });
+
+    add_keybind!(editor, "n", "0", |e| {
+        e.display.cursor.move_x(0, &e.buffer);
+        Ok(())
+    });
+
+    add_keybind!(editor, "n", "gg", |e| {
+        e.display.cursor.move_y(0, &e.buffer);
+        Ok(())
+    });
+
+    add_keybind!(editor, "n", "G", |e| {
+        e.display.cursor.move_y(e.buffer.len() as u16, &e.buffer);
+        Ok(())
+    });
+
     add_keybind!(editor, "c", "<CR>", |e| {
         if e.command.is_empty() {
             e.mode = Mode::NORMAL;

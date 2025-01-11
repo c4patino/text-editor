@@ -53,23 +53,27 @@ impl Cursor {
         self.validate_cursor(buffer);
     }
 
-    fn move_x(&mut self, new_x: u16) {
+    pub fn move_x(&mut self, new_x: u16, buffer: &Vec<String>) {
         self.position.0 = new_x;
+        self.max_column = new_x;
+
+        self.validate_cursor(buffer);
     }
 
-    fn move_y(&mut self, new_y: u16) {
+    pub fn move_y(&mut self, new_y: u16, buffer: &Vec<String>) {
         self.position.1 = new_y;
+        self.validate_cursor(buffer);
     }
 
     fn validate_cursor(&mut self, buffer: &Vec<String>) {
         let (_x, y) = self.position;
 
         if y >= buffer.len() as u16 {
-            self.move_y(buffer.len().saturating_sub(1) as u16);
+            self.position.1 = buffer.len().saturating_sub(1) as u16;
         }
 
         let line_len = buffer[self.position.1 as usize].len() as u16;
-        self.move_x(self.max_column.min(line_len));
+        self.position.0 = self.max_column.min(line_len);
     }
 }
 
@@ -168,7 +172,7 @@ impl Display {
             Mode::INSERT => queue!(
                 self.out,
                 cursor::SetCursorStyle::BlinkingBar,
-                cursor::MoveTo(self.cursor.position.0, self.cursor.position.1),
+                cursor::MoveTo(self.cursor.position.0 + 6, self.cursor.position.1),
             )?,
             Mode::COMMAND => queue!(
                 self.out,
