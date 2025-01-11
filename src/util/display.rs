@@ -1,8 +1,6 @@
 use color_eyre::Report;
 use crossterm::{
-    cursor::{self, SetCursorStyle},
-    execute, queue,
-    style::{self, Stylize},
+    cursor, execute, queue, style,
     terminal::{self, ClearType},
 };
 use std::io::{self, Write};
@@ -28,7 +26,7 @@ impl Cursor {
         Self { position: (0, 0), max_column: 0 }
     }
 
-    fn move_by(&mut self, delta: (i16, i16), buffer: &Vec<String>) {
+    pub fn move_by(&mut self, delta: (i16, i16), buffer: &Vec<String>) {
         let saturate = |pos: u16, delta: i16| {
             if delta.is_negative() {
                 pos.saturating_sub(delta.abs() as u16)
@@ -91,10 +89,6 @@ impl Display {
         let _ = execute!(display.out, terminal::EnterAlternateScreen);
 
         display
-    }
-
-    pub fn move_cursor(&mut self, delta: (i16, i16), buffer: &Vec<String>) {
-        self.cursor.move_by(delta, buffer);
     }
 
     pub fn render(
