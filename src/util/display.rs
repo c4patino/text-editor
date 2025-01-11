@@ -112,17 +112,31 @@ impl Display {
 
         let max_columns = self.size.0 as usize;
 
+        let cursor_line = self.cursor.position.1 as usize + self.offset.1 as usize;
+
         let render = buffer[self.offset.1 as usize..]
             .iter()
+            .enumerate()
             .take(max_lines)
-            .map(|line| {
-                if line.len() > self.offset.0 as usize {
+            .map(|(i, line)| {
+                let absolute_line = i + self.offset.1 as usize;
+                let relative_number = if absolute_line == cursor_line {
+                    absolute_line.to_string()
+                } else {
+                    (absolute_line as isize - cursor_line as isize).abs().to_string()
+                };
+
+                let padded_number = format!("{:>4}  ", relative_number);
+
+                let trimmed_line = if line.len() > self.offset.0 as usize {
                     let start = self.offset.0 as usize;
                     let end = (start + max_columns).min(line.len());
                     &line[start..end]
                 } else {
                     ""
-                }
+                };
+
+                format!("{}{}", padded_number, trimmed_line)
             })
             .collect::<Vec<_>>();
 
@@ -134,7 +148,7 @@ impl Display {
         if rendered_lines < max_lines {
             let empty_lines = max_lines - rendered_lines;
             for _ in 0..empty_lines {
-                queue!(self.out, style::Print("~"), cursor::MoveToNextLine(1))?;
+                queue!(self.out, style::Print("   ~ "), cursor::MoveToNextLine(1))?;
             }
         }
 
@@ -167,7 +181,7 @@ impl Display {
             _ => queue!(
                 self.out,
                 cursor::SetCursorStyle::DefaultUserShape,
-                cursor::MoveTo(self.cursor.position.0, self.cursor.position.1)
+                cursor::MoveTo(self.cursor.position.0 + 6, self.cursor.position.1)
             )?,
         }
 
