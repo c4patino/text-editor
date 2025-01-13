@@ -149,13 +149,13 @@ impl Editor {
                 KeyCode::Char(c) => {
                     let (x, y) = self.display.cursor.position;
                     self.buffer[y as usize].insert(x as usize, c);
-                    self.display.cursor.move_by((1, 0), &self.buffer);
+                    self.display.cursor_move_by((1, 0), &self.buffer);
                 }
                 KeyCode::Enter => {
                     let (x, y) = self.display.cursor.position;
                     let remaining = self.buffer[y as usize].split_off(x as usize);
                     self.buffer.insert((y + 1) as usize, remaining);
-                    self.display.cursor.move_by((-(x as i16), 1), &self.buffer)
+                    self.display.cursor_move_by((-(x as i16), 1), &self.buffer)
                 }
                 KeyCode::Delete => {
                     let (x, y) = self.display.cursor.position;
@@ -170,12 +170,12 @@ impl Editor {
                     let (x, y) = self.display.cursor.position;
                     if x > 0 {
                         self.buffer[y as usize].remove((x - 1) as usize);
-                        self.display.cursor.move_by((-1, 0), &self.buffer);
+                        self.display.cursor_move_by((-1, 0), &self.buffer);
                     } else if y > 0 {
                         let prev_line_len = self.buffer[(y - 1) as usize].len() as u16;
                         let current_line = self.buffer.remove(y as usize);
                         self.buffer[(y - 1) as usize].push_str(&current_line);
-                        self.display.cursor.move_by((prev_line_len as i16, -1), &self.buffer);
+                        self.display.cursor_move_by((prev_line_len as i16, -1), &self.buffer);
                     }
                 }
                 _ => {}

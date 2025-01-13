@@ -26,7 +26,7 @@ impl Cursor {
         Self { position: (0, 0), max_column: 0 }
     }
 
-    pub fn move_by(&mut self, delta: (i16, i16), buffer: &Vec<String>) {
+    fn move_by(&mut self, delta: (i16, i16), buffer: &Vec<String>) {
         let saturate = |pos: u16, delta: i16| {
             if delta.is_negative() {
                 pos.saturating_sub(delta.abs() as u16)
@@ -51,14 +51,14 @@ impl Cursor {
         self.validate_cursor(buffer);
     }
 
-    pub fn move_x(&mut self, new_x: u16, buffer: &Vec<String>) {
+    fn move_x(&mut self, new_x: u16, buffer: &Vec<String>) {
         self.position.0 = new_x;
         self.max_column = new_x;
 
         self.validate_cursor(buffer);
     }
 
-    pub fn move_y(&mut self, new_y: u16, buffer: &Vec<String>) {
+    fn move_y(&mut self, new_y: u16, buffer: &Vec<String>) {
         self.position.1 = new_y;
         self.validate_cursor(buffer);
     }
@@ -110,23 +110,22 @@ impl Display {
 
         let max_columns = self.size.0 as usize;
 
-        let cursor_line = self.cursor.position.1 as usize + self.offset.1 as usize;
-
+        let cursor_line = self.cursor.position.1 as usize;
         let render = buffer[self.offset.1 as usize..]
             .iter()
             .enumerate()
             .take(max_lines)
             .map(|(i, line)| {
-                let absolute_line = i + self.offset.1 as usize;
-                let relative_number = if absolute_line == cursor_line {
-                    absolute_line.to_string()
+                let rendering_line = self.offset.1 as usize + i;
+                let relative_number = if rendering_line == cursor_line {
+                    self.cursor.position.1.to_string()
                 } else {
-                    (absolute_line as isize - cursor_line as isize).abs().to_string()
+                    (cursor_line as isize - rendering_line as isize).abs().to_string()
                 };
 
                 let padded_number = format!("{:>4}  ", relative_number);
 
-                let trimmed_line = if line.len() > self.offset.0 as usize {
+                let trimmed_line = if line.len() > self.cursor.position.0 as usize {
                     let start = self.offset.0 as usize;
                     let end = (start + max_columns).min(line.len());
                     &line[start..end]
@@ -166,7 +165,7 @@ impl Display {
             Mode::INSERT => queue!(
                 self.out,
                 cursor::SetCursorStyle::BlinkingBar,
-                cursor::MoveTo(self.cursor.position.0 + 6, self.cursor.position.1),
+                cursor::MoveTo(self.cursor.position.0 - self.offset.0 + 6, self.cursor.position.1 - self.offset.1),
             )?,
             Mode::COMMAND => queue!(
                 self.out,
@@ -179,11 +178,41 @@ impl Display {
             _ => queue!(
                 self.out,
                 cursor::SetCursorStyle::DefaultUserShape,
-                cursor::MoveTo(self.cursor.position.0 + 6, self.cursor.position.1)
+                cursor::MoveTo(self.cursor.position.0 - self.offset.0 + 6, self.cursor.position.1 - self.offset.1)
             )?,
         }
 
         self.out.flush()?;
         Ok(())
+    }
+
+    pub fn cursor_move_by(&mut self, delta: (i16, i16), buffer: &Vec<String>) {
+        self.cursor.move_by(delta, buffer);
+        self.validate_offset();
+    }
+
+    pub fn cursor_move_x(&mut self, new_x: u16, buffer: &Vec<String>) {
+        self.cursor.move_x(new_x, buffer);
+        self.validate_offset();
+    }
+
+    pub fn cursor_move_y(&mut self, new_y: u16, buffer: &Vec<String>) {
+        self.cursor.move_y(new_y, buffer);
+        self.validate_offset();
+    }
+
+    fn validate_offset(&mut self) {
+        if self.cursor.position.0 >= self.offset.0 + self.size.0 {
+            self.offset.1 = self.cursor.position.1 - self.size.0 + 1;
+        }
+        if self.cursor.position.1 >= self.offset.1 + self.size.1 {
+            self.offset.1 = self.cursor.position.1 - self.size.1 + 1;
+        }
+        if self.cursor.position.0 < self.offset.0 {
+            self.offset.0 = self.cursor.position.0;
+        }
+        if self.cursor.position.1 < self.offset.1 {
+            self.offset.1 = self.cursor.position.1;
+        }
     }
 }

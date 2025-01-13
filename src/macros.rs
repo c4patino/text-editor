@@ -93,22 +93,22 @@ macro_rules! add_keybind {
 
 pub fn default_keybinds(editor: &mut Editor) {
     add_keybind!(editor, "n", "k", |e| {
-        e.display.cursor.move_by((0, -1), &e.buffer);
+        e.display.cursor_move_by((0, -1), &e.buffer);
         Ok(())
     });
 
     add_keybind!(editor, "n", "j", |e| {
-        e.display.cursor.move_by((0, 1), &e.buffer);
+        e.display.cursor_move_by((0, 1), &e.buffer);
         Ok(())
     });
 
     add_keybind!(editor, "n", "h", |e| {
-        e.display.cursor.move_by((-1, 0), &e.buffer);
+        e.display.cursor_move_by((-1, 0), &e.buffer);
         Ok(())
     });
 
     add_keybind!(editor, "n", "l", |e| {
-        e.display.cursor.move_by((1, 0), &e.buffer);
+        e.display.cursor_move_by((1, 0), &e.buffer);
         Ok(())
     });
 
@@ -139,39 +139,39 @@ pub fn default_keybinds(editor: &mut Editor) {
     add_keybind!(editor, "n", "$", |e| {
         let (_x, y) = e.display.cursor.position;
         let line_len = e.buffer[y as usize].len() as u16 - 1;
-        e.display.cursor.move_x(line_len, &e.buffer);
+        e.display.cursor_move_x(line_len, &e.buffer);
         Ok(())
     });
 
     add_keybind!(editor, "n", "_", |e| {
         let current_line = &e.buffer[e.display.cursor.position.1 as usize];
         if let Some((index, _)) = current_line.char_indices().find(|&(_, c)| !c.is_whitespace()) {
-            e.display.cursor.move_x(index as u16, &e.buffer);
+            e.display.cursor_move_x(index as u16, &e.buffer);
         }
 
         Ok(())
     });
 
     add_keybind!(editor, "n", "gg", |e| {
-        e.display.cursor.move_y(0, &e.buffer);
+        e.display.cursor_move_y(0, &e.buffer);
         Ok(())
     });
 
     add_keybind!(editor, "n", "G", |e| {
-        e.display.cursor.move_y(e.buffer.len() as u16, &e.buffer);
+        e.display.cursor_move_y(e.buffer.len() as u16, &e.buffer);
         Ok(())
     });
 
     add_keybind!(editor, "n", "o", |e| {
         e.buffer.insert(e.display.cursor.position.1 as usize + 1, String::new());
-        e.display.cursor.move_by((0, 1), &e.buffer);
+        e.display.cursor_move_by((0, 1), &e.buffer);
         e.mode = Mode::INSERT;
         Ok(())
     });
 
     add_keybind!(editor, "n", "O", |e| {
         e.buffer.insert(e.display.cursor.position.1 as usize, String::new());
-        e.display.cursor.move_by((0, 0), &e.buffer);
+        e.display.cursor_move_by((0, 0), &e.buffer);
         e.mode = Mode::INSERT;
         Ok(())
     });
